@@ -1,0 +1,73 @@
+# ==========================================
+# Golden Wings Enterprise Repository
+# Verify-Repository.ps1
+# Repository Structure Verification
+# ==========================================
+
+$RepositoryRoot = Split-Path $PSScriptRoot -Parent | Split-Path -Parent
+
+$RequiredFolders = @(
+    "00_README",
+    "01_GOVERNANCE",
+    "02_CONSTITUTIONAL_FRAMEWORK",
+    "03_ENTERPRISE_ARCHITECTURE",
+    "04_ENTERPRISE_ASSURANCE",
+    "05_ENTERPRISE_BASELINE",
+    "06_GOVERNANCE_RECORDS",
+    "07_TEMPLATES",
+    "08_EVIDENCE",
+    "09_ARCHIVES",
+    "10_MACHINE_READABLE",
+    "11_AUTOMATION",
+    "99_REFERENCE"
+)
+
+Write-Host ""
+Write-Host "==========================================="
+Write-Host "Golden Wings Repository Verification"
+Write-Host "==========================================="
+Write-Host ""
+
+foreach ($Folder in $RequiredFolders)
+{
+    $Path = Join-Path $RepositoryRoot $Folder
+
+    if (Test-Path $Path)
+    {
+        Write-Host "[PASS] $Folder"
+    }
+    else
+    {
+        Write-Host "[FAIL] $Folder"
+    }
+}
+
+Write-Host ""
+Write-Host "Checking Required Files..."
+Write-Host ""
+
+$RequiredFiles = @(
+    "00_README\README.md",
+    "00_README\CHANGELOG.md",
+    "00_README\DOCUMENT_REGISTER.csv",
+    "08_EVIDENCE\Hashes\HASHES_2026.1.csv",
+    "05_ENTERPRISE_BASELINE\GW-BASELINE-2026.1\MANIFEST.md",
+    "09_ARCHIVES\GW-Release-2026.1\MANIFEST.md"
+)
+
+foreach ($File in $RequiredFiles)
+{
+    $Path = Join-Path $RepositoryRoot $File
+
+    if (Test-Path $Path)
+    {
+        Write-Host "[PASS] $File"
+    }
+    else
+    {
+        Write-Host "[FAIL] $File"
+    }
+}
+
+Write-Host ""
+Write-Host "Verification Complete."

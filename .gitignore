@@ -1,0 +1,25 @@
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Office temporary files
+~$*.docx
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+
+# PowerShell
+*.ps1xml
+
+# Build artifacts
+*.zip
