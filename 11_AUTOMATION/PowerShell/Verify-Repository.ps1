@@ -6,7 +6,7 @@ Import-Module "$PSScriptRoot\Modules\Repository.Common.psm1" -Force
 # Repository Structure Verification
 # ==========================================
 
-$RepositoryRoot = Split-Path $PSScriptRoot -Parent | Split-Path -Parent
+$RepositoryRoot = Get-RepositoryRoot
 
 $RequiredFolders = @(
     "00_README",
@@ -30,16 +30,11 @@ Write-Host "Golden Wings Repository Verification"
 Write-Host "==========================================="
 Write-Host ""
 
-foreach ($Folder in $RequiredFolders)
-{
+foreach ($Folder in $RequiredFolders) {
     $Path = Join-Path $RepositoryRoot $Folder
-
-    if (Test-Path $Path)
-    {
+    if (Test-Path $Path) {
         Write-Host "[PASS] $Folder"
-    }
-    else
-    {
+    } else {
         Write-Host "[FAIL] $Folder"
     }
 }
@@ -52,21 +47,14 @@ $RequiredFiles = @(
     "00_README\README.md",
     "00_README\CHANGELOG.md",
     "00_README\DOCUMENT_REGISTER.csv",
-    "08_EVIDENCE\Hashes\HASHES_2026.1.csv",
     (Join-Path (Get-BaselineFolder) "MANIFEST.md"),
     (Join-Path (Get-ReleaseFolder) "MANIFEST.md")
 )
 
-foreach ($File in $RequiredFiles)
-{
-    $Path = Join-Path $RepositoryRoot $File
-
-    if (Test-Path $Path)
-    {
+foreach ($File in $RequiredFiles) {
+    if (Test-Path $File) {
         Write-Host "[PASS] $File"
-    }
-    else
-    {
+    } else {
         Write-Host "[FAIL] $File"
     }
 }

@@ -1,81 +1,36 @@
+##############################################################
+#
+# Golden Wings Enterprise Repository
+# Manifest Generator
+#
+# Description:
+#     Orchestrates the generation of MANIFEST.md
+#     using the Manifest Service.
+#
+# Version : 2.0 (Refactored)
+#
+##############################################################
+
+$ErrorActionPreference = "Stop"
+
+Import-Module "$PSScriptRoot\Modules\Repository.Common.psm1" -Force
+
 Clear-Host
 
-$Root = "D:\GoldenWings"
+Write-Section "Golden Wings Manifest Generator"
 
-$Manifest =
-"$Root\05_ENTERPRISE_BASELINE\GW-BASELINE-2026.1\MANIFEST.md"
+# Get baseline folder using Configuration Service
+$BaselineFolder = Get-BaselineFolder
+$OutputFile = Join-Path $BaselineFolder "MANIFEST.md"
 
-$DocumentCount =
-(Get-ChildItem $Root -Recurse -Filter *.docx -File |
-Where-Object {
-    $_.FullName -notmatch "\\09_ARCHIVES\\"
-}).Count
+# Generate manifest using Manifest Service
+$ManifestContent = New-Manifest
 
-$Today = Get-Date -Format "yyyy-MM-dd"
-
-@"
-# Golden Wings Enterprise Repository Baseline
-
-## Baseline Information
-
-| Property | Value |
-|----------|-------|
-| Repository | Golden Wings Enterprise Repository |
-| Baseline ID | GW-BASELINE-2026.1 |
-| Version | 1.0 |
-| Status | Approved Baseline |
-| Date | $Today |
-| Controlled Documents | $DocumentCount |
-
----
-
-## Repository Structure
-
-00_README
-
-01_GOVERNANCE
-
-02_CONSTITUTIONAL_FRAMEWORK
-
-03_ENTERPRISE_ARCHITECTURE
-
-04_ENTERPRISE_ASSURANCE
-
-05_ENTERPRISE_BASELINE
-
-06_GOVERNANCE_RECORDS
-
-07_TEMPLATES
-
-08_EVIDENCE
-
-09_ARCHIVES
-
-10_MACHINE_READABLE
-
-11_AUTOMATION
-
-99_REFERENCE
-
----
-
-## Controlled Document Register
-
-00_README/DOCUMENT_REGISTER.csv
-
----
-
-## Repository Hash Inventory
-
-08_EVIDENCE/Hashes/HASHES_2026.1.csv
-
----
-
-Generated Automatically
-
-"@ | Set-Content $Manifest -Encoding UTF8
+# Export manifest using Manifest Service
+Export-Manifest -Content $ManifestContent -OutputPath $OutputFile
 
 Write-Host ""
 Write-Host "Manifest Generated Successfully"
 Write-Host ""
-Write-Host $Manifest
+Write-Host "Output File: $OutputFile"
+Write-Host ""

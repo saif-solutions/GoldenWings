@@ -3,14 +3,25 @@
 # Golden Wings Enterprise Automation Framework
 # Repository.Common.psm1
 #
-# Version : 1.5
+# Version : 1.8
 # Baseline: GW-BASELINE-2026.1
 #
 # PHASE 1 IMPLEMENTATION (2026-07-04)
 # - Configuration Service
 # - Logging Service (Enhanced with backward compatibility)
 # - Repository Service
-# - Total: 39 exported functions
+#
+# PHASE 2 IMPLEMENTATION (2026-07-04)
+# - Document Service
+# - Validation Service
+# - Hash Service
+#
+# PHASE 3 IMPLEMENTATION (2026-07-04)
+# - Manifest Service
+# - Evidence Service
+# - Report Service
+#
+# Total: 48 exported functions
 #
 ##############################################################
 
@@ -318,7 +329,7 @@ function Get-SHA256 {
         throw "File not found: $Path"
     }
     
-    (Get-FileHash $Path -Algorithm SHA256).Hash
+    return (Get-FileHash $Path -Algorithm SHA256).Hash
 }
 
 function Get-RelativePath {
@@ -329,7 +340,7 @@ function Get-RelativePath {
     )
     
     $Root = Get-RepositoryRoot
-    $FullPath.Replace($Root, "").TrimStart("\")
+    return $FullPath.Replace($Root, "").TrimStart("\")
 }
 
 function Test-RepositoryFolder {
@@ -340,7 +351,7 @@ function Test-RepositoryFolder {
     )
     
     $Path = Join-Path (Get-RepositoryRoot) $Folder
-    Test-Path $Path
+    return Test-Path $Path
 }
 
 function Test-RepositoryFile {
@@ -351,7 +362,7 @@ function Test-RepositoryFile {
     )
     
     $Path = Join-Path (Get-RepositoryRoot) $File
-    Test-Path $Path
+    return Test-Path $Path
 }
 
 #-------------------------------------------------------------
@@ -626,8 +637,7 @@ function Get-Documents {
         [switch]$ExcludeBaseline
     )
     
-    $Documents = Get-RepositoryDocuments -ExcludeArchives:$ExcludeArchives -ExcludeBaseline:$ExcludeBaseline
-    return $Documents
+    return Get-RepositoryDocuments -ExcludeArchives:$ExcludeArchives -ExcludeBaseline:$ExcludeBaseline
 }
 
 <#
@@ -719,7 +729,6 @@ function Test-RepositoryStructure {
     param()
     
     $Root = Get-RepositoryRoot
-    $Config = Get-RepositoryConfiguration
     $MissingFolders = @()
     
     $RequiredFolders = @(
@@ -804,7 +813,7 @@ function Invoke-RepositoryValidation {
 }
 
 #-------------------------------------------------------------
-# Hash Service (Enhanced — Phase 2)
+# Hash Service (New — Phase 2)
 #-------------------------------------------------------------
 
 <#
@@ -818,10 +827,10 @@ function Invoke-RepositoryValidation {
 .PARAMETER Algorithm
     The hash algorithm to use. Default: SHA256.
 .EXAMPLE
-    Get-FileHash -Path "file.txt"
-    Get-FileHash -Path "file.txt" -Algorithm MD5
+    Get-RepositoryFileHash -Path "file.txt"
+    Get-RepositoryFileHash -Path "file.txt" -Algorithm MD5
 #>
-function Get-FileHash {
+function Get-RepositoryFileHash {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -835,8 +844,7 @@ function Get-FileHash {
         throw "File not found: $Path"
     }
     
-    $Hash = (Get-FileHash -Path $Path -Algorithm $Algorithm).Hash
-    return $Hash
+    return (Get-FileHash -Path $Path -Algorithm $Algorithm).Hash
 }
 
 <#
@@ -863,16 +871,31 @@ function Export-HashInventory {
     )
     
     $Root = Get-RepositoryRoot
-    $ExcludedPatterns = @(
-        [regex]::Escape((Get-RepositoryConfiguration).ArchivesRoot),
-        [regex]::Escape((Join-Path (Get-RepositoryConfiguration).EvidenceFolder "Hashes"))
+    $Config = Get-RepositoryConfiguration
+    
+    # Ensure output directory exists
+    $OutputDir = Split-Path $OutputPath -Parent
+    if ($OutputDir -and -not (Test-Path $OutputDir)) {
+        New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
+    }
+    
+    # Get the output filename for exclusion
+    $OutputFileName = Split-Path $OutputPath -Leaf
+    
+    # Build exclusion patterns - using simple string matching (NOT regex)
+    $ExcludePatterns = @(
+        "\09_ARCHIVES\",
+        "\08_EVIDENCE\Hashes\",
+        $OutputFileName
     )
     
-    $Files = Get-ChildItem $Root -Recurse -File -Include *.docx,*.md,*.csv |
+    $Files = Get-ChildItem $Root -Recurse -File -Include *.docx,*.md,*.csv,*.ps1,*.json |
         Where-Object {
             $Include = $true
-            foreach ($Pattern in $ExcludedPatterns) {
-                if ($_.FullName -match $Pattern) {
+            $FullPath = $_.FullName
+            foreach ($Pattern in $ExcludePatterns) {
+                # Use -like with wildcards instead of -match (regex)
+                if ($FullPath -like "*$Pattern*") {
                     $Include = $false
                     break
                 }
@@ -881,14 +904,19 @@ function Export-HashInventory {
         }
     
     $Inventory = foreach ($File in $Files) {
-        $Hash = Get-FileHash -Path $File.FullName -Algorithm $Algorithm
-        
-        [PSCustomObject]@{
-            Repository_Path = Get-RelativePath -FullPath $File.FullName
-            Hash = $Hash
-            Algorithm = $Algorithm
-            FileName = $File.Name
-            LastModified = $File.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
+        try {
+            $Hash = Get-RepositoryFileHash -Path $File.FullName -Algorithm $Algorithm
+            
+            [PSCustomObject]@{
+                Repository_Path = Get-RelativePath -FullPath $File.FullName
+                Hash = $Hash
+                Algorithm = $Algorithm
+                FileName = $File.Name
+                LastModified = $File.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
+            }
+        }
+        catch {
+            Write-WarningMessage "Failed to hash: $($File.FullName)"
         }
     }
     
@@ -926,7 +954,7 @@ function Verify-Hash {
     )
     
     try {
-        $ComputedHash = Get-FileHash -Path $Path -Algorithm $Algorithm
+        $ComputedHash = Get-RepositoryFileHash -Path $Path -Algorithm $Algorithm
         return ($ComputedHash -eq $ExpectedHash)
     }
     catch {
@@ -935,9 +963,428 @@ function Verify-Hash {
     }
 }
 
+#-------------------------------------------------------------
+# Manifest Service (New — Phase 3)
+#-------------------------------------------------------------
+
+<#
+.SYNOPSIS
+    Gets all data needed for a repository manifest.
+.DESCRIPTION
+    Collects repository metadata, document count, and configuration
+    information using existing services.
+.EXAMPLE
+    $data = Get-ManifestData
+#>
+function Get-ManifestData {
+    [CmdletBinding()]
+    param()
+    
+    $Config = Get-RepositoryConfiguration
+    $Stats = Get-RepositoryStatistics
+    $State = Get-RepositoryState
+    
+    [PSCustomObject]@{
+        Repository = "Golden Wings Enterprise Repository"
+        BaselineID = $Config.Baseline
+        Version = $Config.Version
+        Status = "Approved Baseline"
+        Date = Get-CurrentDate
+        ControlledDocuments = $Stats.Documents
+        Root = $Config.Root
+        DocumentCount = $State.DocumentCount
+        ScriptCount = $State.ScriptCount
+        FolderCount = $State.FolderCount
+        LastModified = $State.LastModified
+    }
+}
+
+<#
+.SYNOPSIS
+    Creates manifest content as a string.
+.DESCRIPTION
+    Generates markdown-formatted manifest content.
+.EXAMPLE
+    $content = New-Manifest
+#>
+function New-Manifest {
+    [CmdletBinding()]
+    param()
+    
+    $Data = Get-ManifestData
+    
+    $Content = @"
+# Golden Wings Enterprise Repository Baseline
+
+## Baseline Information
+
+| Property | Value |
+|----------|-------|
+| Repository | $($Data.Repository) |
+| Baseline ID | $($Data.BaselineID) |
+| Version | $($Data.Version) |
+| Status | $($Data.Status) |
+| Date | $($Data.Date) |
+| Controlled Documents | $($Data.ControlledDocuments) |
+
+---
+
+## Repository Structure
+
+00_README
+
+01_GOVERNANCE
+
+02_CONSTITUTIONAL_FRAMEWORK
+
+03_ENTERPRISE_ARCHITECTURE
+
+04_ENTERPRISE_ASSURANCE
+
+05_ENTERPRISE_BASELINE
+
+06_GOVERNANCE_RECORDS
+
+07_TEMPLATES
+
+08_EVIDENCE
+
+09_ARCHIVES
+
+10_MACHINE_READABLE
+
+11_AUTOMATION
+
+99_REFERENCE
+
+---
+
+## Controlled Document Register
+
+00_README/DOCUMENT_REGISTER.csv
+
+---
+
+## Repository Hash Inventory
+
+08_EVIDENCE/Hashes/HASHES_2026.1.csv
+
+---
+
+Generated Automatically by GW-EAF Manifest Service
+"@
+    
+    return $Content
+}
+
+<#
+.SYNOPSIS
+    Exports manifest to a file.
+.DESCRIPTION
+    Writes the manifest content to the specified output path.
+.EXAMPLE
+    Export-Manifest -Content $content -OutputPath ".\MANIFEST.md"
+#>
+function Export-Manifest {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Content,
+        
+        [Parameter(Mandatory)]
+        [string]$OutputPath
+    )
+    
+    $Content | Set-Content -Path $OutputPath -Encoding UTF8
+    Write-Success "Manifest exported to: $OutputPath"
+}
 
 #-------------------------------------------------------------
-# Exported Functions (33 functions — VERIFIED)
+# Evidence Service (New — Phase 3)
+#-------------------------------------------------------------
+
+<#
+.SYNOPSIS
+    Creates an evidence record for a repository operation.
+.DESCRIPTION
+    Captures metadata about an operation including timestamp,
+    operation type, and status.
+.PARAMETER Operation
+    The operation name (e.g., "Baseline", "Release", "Validation")
+.PARAMETER Status
+    The operation status ("Success", "Warning", "Error")
+.PARAMETER Details
+    Additional details about the operation
+.EXAMPLE
+    $evidence = New-Evidence -Operation "Baseline" -Status "Success"
+#>
+function New-Evidence {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Operation,
+        
+        [ValidateSet('Success','Warning','Error')]
+        [string]$Status = 'Success',
+        
+        [string]$Details = ''
+    )
+    
+    $Config = Get-RepositoryConfiguration
+    
+    [PSCustomObject]@{
+        Operation = $Operation
+        Status = $Status
+        Timestamp = Get-CurrentDate
+        Version = $Config.Version
+        Baseline = $Config.Baseline
+        Repository = $Config.Root
+        Details = $Details
+        EvidenceID = [Guid]::NewGuid().ToString()
+    }
+}
+
+<#
+.SYNOPSIS
+    Exports evidence to a file.
+.DESCRIPTION
+    Writes evidence data to a JSON file.
+.PARAMETER Evidence
+    The evidence object from New-Evidence
+.PARAMETER OutputPath
+    The path to write the evidence file
+.EXAMPLE
+    Export-Evidence -Evidence $evidence -OutputPath ".\evidence.json"
+#>
+function Export-Evidence {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [PSCustomObject]$Evidence,
+        
+        [Parameter(Mandatory)]
+        [string]$OutputPath
+    )
+    
+    # Ensure directory exists
+    $Directory = Split-Path $OutputPath -Parent
+    if ($Directory -and -not (Test-Path $Directory)) {
+        New-Item -ItemType Directory -Force -Path $Directory | Out-Null
+    }
+    
+    $Evidence | ConvertTo-Json -Depth 4 | Out-File -FilePath $OutputPath -Encoding UTF8
+    Write-Success "Evidence exported to: $OutputPath"
+}
+
+<#
+.SYNOPSIS
+    Gets the current evidence status.
+.DESCRIPTION
+    Checks all evidence files in the evidence folder.
+.EXAMPLE
+    $status = Get-EvidenceStatus
+#>
+function Get-EvidenceStatus {
+    [CmdletBinding()]
+    param()
+    
+    $Config = Get-RepositoryConfiguration
+    $EvidenceFolder = Join-Path $Config.EvidenceFolder "Evidence"
+    
+    if (-not (Test-Path $EvidenceFolder)) {
+        return [PSCustomObject]@{
+            Exists = $false
+            EvidenceFiles = @()
+            TotalFiles = 0
+            LastEvidence = $null
+        }
+    }
+    
+    $Files = Get-ChildItem $EvidenceFolder -Filter *.json -File | Sort-Object LastWriteTime -Descending
+    $LastEvidence = if ($Files.Count -gt 0) { $Files[0].LastWriteTime } else { $null }
+    
+    [PSCustomObject]@{
+        Exists = $true
+        EvidenceFiles = $Files.Name
+        TotalFiles = $Files.Count
+        LastEvidence = $LastEvidence
+    }
+}
+
+#-------------------------------------------------------------
+# Report Service (New — Phase 3)
+#-------------------------------------------------------------
+
+<#
+.SYNOPSIS
+    Creates a repository health report.
+.DESCRIPTION
+    Aggregates information from various services to create
+    a comprehensive repository health report.
+.EXAMPLE
+    $report = New-Report -Type "Health"
+#>
+function New-Report {
+    [CmdletBinding()]
+    param(
+        [ValidateSet('Health','Summary','Full')]
+        [string]$Type = 'Health'
+    )
+    
+    $Config = Get-RepositoryConfiguration
+    $State = Get-RepositoryState
+    $Stats = Get-RepositoryStatistics
+    $EvidenceStatus = Get-EvidenceStatus
+    
+    $Report = @{
+        ReportType = $Type
+        Timestamp = Get-CurrentDate
+        Repository = $Config.Root
+        Version = $Config.Version
+        Baseline = $Config.Baseline
+        Health = @{
+            DocumentCount = $State.DocumentCount
+            ScriptCount = $State.ScriptCount
+            FolderCount = $State.FolderCount
+            LastModified = $State.LastModified
+        }
+        Statistics = @{
+            Documents = $Stats.Documents
+            Scripts = $Stats.Scripts
+            Markdown = $Stats.Markdown
+            CSV = $Stats.CSV
+            JSON = $Stats.JSON
+            Folders = $Stats.Folders
+        }
+        Evidence = @{
+            Exists = $EvidenceStatus.Exists
+            TotalFiles = $EvidenceStatus.TotalFiles
+            LastEvidence = $EvidenceStatus.LastEvidence
+        }
+        Status = "Healthy"
+    }
+    
+    # Determine health status
+    if ($State.DocumentCount -eq 0) {
+        $Report.Status = "Warning"
+    }
+    if (-not $EvidenceStatus.Exists) {
+        $Report.Status = "Warning"
+    }
+    
+    return $Report
+}
+
+<#
+.SYNOPSIS
+    Exports a report to a file.
+.DESCRIPTION
+    Writes the report to a JSON file.
+.PARAMETER Report
+    The report object from New-Report
+.PARAMETER OutputPath
+    The path to write the report file
+.PARAMETER Format
+    The output format (JSON or Markdown)
+.EXAMPLE
+    Export-Report -Report $report -OutputPath ".\report.json"
+#>
+function Export-Report {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [PSCustomObject]$Report,
+        
+        [Parameter(Mandatory)]
+        [string]$OutputPath,
+        
+        [ValidateSet('JSON','Markdown')]
+        [string]$Format = 'JSON'
+    )
+    
+    # Ensure directory exists
+    $Directory = Split-Path $OutputPath -Parent
+    if ($Directory -and -not (Test-Path $Directory)) {
+        New-Item -ItemType Directory -Force -Path $Directory | Out-Null
+    }
+    
+    if ($Format -eq 'JSON') {
+        $Report | ConvertTo-Json -Depth 4 | Out-File -FilePath $OutputPath -Encoding UTF8
+    } else {
+        # Markdown format
+        $Content = @"
+# Repository Health Report
+
+## Summary
+| Property | Value |
+|----------|-------|
+| Report Type | $($Report.ReportType) |
+| Timestamp | $($Report.Timestamp) |
+| Repository | $($Report.Repository) |
+| Version | $($Report.Version) |
+| Baseline | $($Report.Baseline) |
+| Status | $($Report.Status) |
+
+## Health
+| Metric | Value |
+|--------|-------|
+| Documents | $($Report.Health.DocumentCount) |
+| Scripts | $($Report.Health.ScriptCount) |
+| Folders | $($Report.Health.FolderCount) |
+| Last Modified | $($Report.Health.LastModified) |
+
+## Statistics
+| Metric | Value |
+|--------|-------|
+| Documents (.docx) | $($Report.Statistics.Documents) |
+| Scripts (.ps1) | $($Report.Statistics.Scripts) |
+| Markdown (.md) | $($Report.Statistics.Markdown) |
+| CSV Files | $($Report.Statistics.CSV) |
+| JSON Files | $($Report.Statistics.JSON) |
+| Folders | $($Report.Statistics.Folders) |
+
+## Evidence Status
+| Property | Value |
+|----------|-------|
+| Exists | $($Report.Evidence.Exists) |
+| Total Files | $($Report.Evidence.TotalFiles) |
+| Last Evidence | $($Report.Evidence.LastEvidence) |
+
+---
+Generated by GW-EAF Report Service
+"@
+        $Content | Set-Content -Path $OutputPath -Encoding UTF8
+    }
+    
+    Write-Success "Report exported to: $OutputPath"
+}
+
+<#
+.SYNOPSIS
+    Gets the repository health status.
+.DESCRIPTION
+    Returns a simple health status object.
+.EXAMPLE
+    $health = Get-RepositoryHealth
+#>
+function Get-RepositoryHealth {
+    [CmdletBinding()]
+    param()
+    
+    $Report = New-Report -Type "Health"
+    
+    [PSCustomObject]@{
+        Status = $Report.Status
+        DocumentCount = $Report.Health.DocumentCount
+        ScriptCount = $Report.Health.ScriptCount
+        LastModified = $Report.Health.LastModified
+        EvidenceExists = $Report.Evidence.Exists
+        ReportTimestamp = $Report.Timestamp
+    }
+}
+
+#-------------------------------------------------------------
+# Exported Functions (48 functions — VERIFIED)
 #-------------------------------------------------------------
 
 Export-ModuleMember -Function @(
@@ -991,15 +1438,29 @@ Export-ModuleMember -Function @(
     'Get-DocumentMetadata',
     'Get-Documents',
     'Export-DocumentRegister',
-
+    
     # Validation Service (New — Phase 2) — 3 functions
     'Test-DocumentName',
     'Test-RepositoryStructure',
     'Invoke-RepositoryValidation',
-
+    
     # Hash Service (New — Phase 2) — 3 functions
-    'Get-FileHash',
+    'Get-RepositoryFileHash',
     'Export-HashInventory',
-    'Verify-Hash'
+    'Verify-Hash',
 
-)  # Total: 7+8+1+4+2+1+2+4+4 = 39 functions
+    # Manifest Service (New — Phase 3) — 3 functions
+    'Get-ManifestData',
+    'New-Manifest',
+    'Export-Manifest',
+    
+    # Evidence Service (New — Phase 3) — 3 functions
+    'New-Evidence',
+    'Export-Evidence',
+    'Get-EvidenceStatus',
+    
+    # Report Service (New — Phase 3) — 3 functions
+    'New-Report',
+    'Export-Report',
+    'Get-RepositoryHealth'
+)

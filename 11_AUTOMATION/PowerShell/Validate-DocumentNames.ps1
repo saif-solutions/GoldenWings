@@ -2,59 +2,24 @@ Import-Module "$PSScriptRoot\Modules\Repository.Common.psm1" -Force
 
 Clear-Host
 
-$Root = Get-RepositoryRoot
-
 Write-Host ""
 Write-Host "======================================="
 Write-Host "Golden Wings Document Name Validator"
 Write-Host "======================================="
 Write-Host ""
 
-$Invalid = @()
+# Use Validation Service
+$Results = Invoke-RepositoryValidation
 
-Get-ChildItem $Root -Recurse -File -Filter *.docx |
-
-Where-Object {
-
-    $_.FullName -notmatch "\\09_ARCHIVES\\" -and
-    $_.FullName -notmatch "\\05_ENTERPRISE_BASELINE\\"-and
-    $_.FullName -notmatch "\\99_REFERENCE\\"
-
-
-} |
-
-ForEach-Object {
-
-    $Name = $_.BaseName
-
-    if (
-
-        $Name -notmatch '^Document [A-Z]' -and
-        $Name -notmatch '^DOCUMENT [A-Z]' -and
-        $Name -notmatch '^GEN ' -and
-        $Name -notmatch '^Gen ' -and
-        $Name -notmatch '^GOLDEN WINGS'
-
-    )
-    {
-        $Invalid += $_
+if ($Results.Success) {
+    Write-Host "[PASS] All document names comply." -ForegroundColor Green
+} else {
+    Write-Host ""
+    Write-Host "[FAIL] Invalid filenames:" -ForegroundColor Red
+    Write-Host ""
+    foreach ($Error in $Results.Errors) {
+        Write-Host "  $Error" -ForegroundColor Red
     }
-
-}
-
-if($Invalid.Count -eq 0)
-{
-    Write-Host "[PASS] All document names comply."
-}
-else
-{
-    Write-Host ""
-    Write-Host "[FAIL] Invalid filenames:"
-    Write-Host ""
-
-    $Invalid |
-    Select-Object FullName |
-    Format-Table -AutoSize
 }
 
 Write-Host ""
