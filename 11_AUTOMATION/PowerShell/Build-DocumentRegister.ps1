@@ -1,75 +1,42 @@
-# ------------------------------------------------------------
+##############################################################
+#
 # Golden Wings Enterprise Repository
-# Document Register Bootstrap Generator
-# Version: 1.0
-# ------------------------------------------------------------
+# Document Register Generator
+#
+# Description:
+#     Orchestrates the generation of DOCUMENT_REGISTER.csv
+#     using the Document Service.
+#
+# Version : 2.0 (Refactored)
+#
+##############################################################
 
-$RepositoryRoot = "D:\GoldenWings"
-$OutputFile = "$RepositoryRoot\00_README\DOCUMENT_REGISTER.csv"
+$ErrorActionPreference = "Stop"
 
-$Header = @(
-"Document_ID",
-"Document_Title",
-"Repository_Path",
-"Filename",
-"Version",
-"Status",
-"Owner",
-"Classification",
-"Baseline",
-"Last_Updated"
-)
+Import-Module "$PSScriptRoot\Modules\Repository.Common.psm1" -Force
 
-$Rows = @()
+Start-BuildTimer
 
-Get-ChildItem $RepositoryRoot -Recurse -Filter *.docx |
-Where-Object {
+Write-Section "Golden Wings Document Register Generator"
 
-    $_.FullName -notmatch "\\09_ARCHIVES\\" `
-    -and $_.FullName -notmatch "\\05_ENTERPRISE_BASELINE\\"
+$RepositoryRoot = Get-RepositoryRoot
+$OutputFile = Join-Path $RepositoryRoot "00_README\DOCUMENT_REGISTER.csv"
 
-} |
-Sort-Object FullName |
-ForEach-Object {
+# Get documents using the service
+$Documents = Get-Documents -ExcludeArchives -ExcludeBaseline
 
-    $Name = $_.BaseName
+# Export using the service
+Export-DocumentRegister -Documents $Documents -OutputPath $OutputFile
 
-    $ID = ""
-
-    if ($Name -match "A-\d+") {
-        $ID = $Matches[0]
-    }
-    elseif ($Name -match "ZA?-?[A-Z0-9\.]*") {
-        $ID = $Matches[0]
-    }
-    elseif ($Name -match "Document ([A-Z0-9\.]+)") {
-        $ID = $Matches[1]
-    }
-
-    $Rows += [PSCustomObject]@{
-
-        Document_ID      = $ID
-        Document_Title   = ""
-        Repository_Path  = $_.DirectoryName.Replace($RepositoryRoot + "\", "")
-        Filename         = $_.Name
-        Version          = ""
-        Status           = "Draft"
-        Owner            = ""
-        Classification   = "Internal"
-        Baseline         = ""
-        Last_Updated     = $_.LastWriteTime.ToString("yyyy-MM-dd")
-
-    }
-
-}
-
-$Rows |
-Export-Csv $OutputFile -NoTypeInformation -Encoding UTF8
+Write-Success "Document Register Generated Successfully."
 
 Write-Host ""
-Write-Host "Document Register Generated Successfully"
+Write-Host ("Output File      : {0}" -f $OutputFile)
+Write-Host ("Documents        : {0}" -f $Documents.Count)
+Write-Host ("Repository Root  : {0}" -f $RepositoryRoot)
+Write-Host ("Baseline         : {0}" -f (Get-BaselineName))
+Write-Host ("Repository Ver.  : {0}" -f (Get-RepositoryVersion))
+
+Stop-BuildTimer
+
 Write-Host ""
-Write-Host "Output:"
-Write-Host $OutputFile
-Write-Host ""
-Write-Host "Documents Found:" $Rows.Count

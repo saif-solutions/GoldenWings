@@ -1,51 +1,29 @@
-# ==========================================
+##############################################################
+#
 # Golden Wings Enterprise Repository
-# Build-Hashes.ps1
-# Generates SHA256 hash inventory
-# ==========================================
+# Hash Inventory Generator
+#
+# Description:
+#     Orchestrates the generation of SHA256 hash inventory
+#     using the Hash Service.
+#
+# Version : 2.0 (Refactored)
+#
+##############################################################
 
-$RepositoryRoot = Split-Path $PSScriptRoot -Parent | Split-Path -Parent
+$ErrorActionPreference = "Stop"
 
-$OutputFolder = Join-Path $RepositoryRoot `
-    "08_EVIDENCE\Hashes"
+Import-Module "$PSScriptRoot\Modules\Repository.Common.psm1" -Force
 
-$OutputFile = Join-Path $OutputFolder `
-    "HASHES_2026.1.csv"
+$Root = Get-RepositoryRoot
+$OutputFolder = Join-Path $Root "08_EVIDENCE\Hashes"
+$OutputFile = Join-Path $OutputFolder "HASHES_2026.1.csv"
 
-# Create output folder if needed
-if (!(Test-Path $OutputFolder))
-{
-    New-Item `
-        -ItemType Directory `
-        -Path $OutputFolder | Out-Null
-}
+# Ensure output folder exists
+New-Item -ItemType Directory -Force -Path $OutputFolder | Out-Null
 
-Get-ChildItem `
-    $RepositoryRoot `
-    -Recurse `
-    -File `
-    -Include *.docx,*.md,*.csv |
-Where-Object {
-
-    $_.FullName -notmatch "\\09_ARCHIVES\\" -and
-    $_.FullName -notmatch "\\08_EVIDENCE\\Hashes\\"
-
-} |
-Get-FileHash -Algorithm SHA256 |
-Sort-Object Path |
-Select-Object @{
-
-    Name='Repository_Path'
-
-    Expression={
-        $_.Path.Replace($RepositoryRoot + '\','')
-    }
-
-},Hash |
-Export-Csv `
-    $OutputFile `
-    -NoTypeInformation `
-    -Encoding UTF8
+# Generate hash inventory using the service
+Export-HashInventory -OutputPath $OutputFile
 
 Write-Host ""
 Write-Host "SHA256 Inventory Generated"

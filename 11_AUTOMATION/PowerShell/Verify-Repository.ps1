@@ -1,3 +1,5 @@
+Import-Module "$PSScriptRoot\Modules\Repository.Common.psm1" -Force
+
 # ==========================================
 # Golden Wings Enterprise Repository
 # Verify-Repository.ps1
@@ -51,8 +53,8 @@ $RequiredFiles = @(
     "00_README\CHANGELOG.md",
     "00_README\DOCUMENT_REGISTER.csv",
     "08_EVIDENCE\Hashes\HASHES_2026.1.csv",
-    "05_ENTERPRISE_BASELINE\GW-BASELINE-2026.1\MANIFEST.md",
-    "09_ARCHIVES\GW-Release-2026.1\MANIFEST.md"
+    (Join-Path (Get-BaselineFolder) "MANIFEST.md"),
+    (Join-Path (Get-ReleaseFolder) "MANIFEST.md")
 )
 
 foreach ($File in $RequiredFiles)

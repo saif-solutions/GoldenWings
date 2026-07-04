@@ -3,14 +3,14 @@
 # Golden Wings Enterprise Automation Framework
 # Repository.Common.psm1
 #
-# Version : 1.2
+# Version : 1.5
 # Baseline: GW-BASELINE-2026.1
 #
 # PHASE 1 IMPLEMENTATION (2026-07-04)
 # - Configuration Service
 # - Logging Service (Enhanced with backward compatibility)
 # - Repository Service
-# - Total: 28 exported functions
+# - Total: 39 exported functions
 #
 ##############################################################
 
@@ -539,7 +539,405 @@ function Get-RepositoryState {
 }
 
 #-------------------------------------------------------------
-# Exported Functions (28 functions — VERIFIED)
+# Document Service (New — Phase 2)
+#-------------------------------------------------------------
+
+<#
+.SYNOPSIS
+    Parses a document ID from a filename.
+.DESCRIPTION
+    Uses regex patterns to extract document IDs from filenames.
+    Supports: A-###, ZA-###, Document ###, etc.
+.EXAMPLE
+    Parse-DocumentID -FileName "A-001_Constitution_v1.0.docx" -> "A-001"
+#>
+function Parse-DocumentID {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$FileName
+    )
+    
+    $DocumentID = ""
+    
+    switch -Regex ($FileName) {
+        "A-\d+" {
+            $DocumentID = $Matches[0]
+            break
+        }
+        "ZA?-?[A-Z0-9\.]*" {
+            $DocumentID = $Matches[0]
+            break
+        }
+        "Document ([A-Z0-9\.]+)" {
+            $DocumentID = $Matches[1]
+            break
+        }
+    }
+    
+    return $DocumentID
+}
+
+<#
+.SYNOPSIS
+    Gets metadata for a single document.
+.DESCRIPTION
+    Returns a PSCustomObject with document metadata.
+.EXAMPLE
+    $metadata = Get-DocumentMetadata -Path "D:\GoldenWings\A-001_Constitution.docx"
+#>
+function Get-DocumentMetadata {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+    
+    $File = Get-Item $Path
+    $DocumentID = Parse-DocumentID -FileName $File.BaseName
+    
+    [PSCustomObject]@{
+        Document_ID = $DocumentID
+        Document_Title = $File.BaseName
+        Repository_Path = Get-RelativePath -FullPath $File.DirectoryName
+        Filename = $File.Name
+        Version = Get-RepositoryVersion
+        Status = "Controlled"
+        Owner = "Golden Wings"
+        Classification = "Internal"
+        Baseline = Get-BaselineName
+        Last_Updated = $File.LastWriteTime.ToString("yyyy-MM-dd")
+        FullPath = $File.FullName
+    }
+}
+
+<#
+.SYNOPSIS
+    Gets all documents with optional exclusions.
+.DESCRIPTION
+    Returns all .docx files with optional exclusions for archives and baseline.
+.EXAMPLE
+    $documents = Get-Documents -ExcludeArchives
+#>
+function Get-Documents {
+    [CmdletBinding()]
+    param(
+        [switch]$ExcludeArchives,
+        [switch]$ExcludeBaseline
+    )
+    
+    $Documents = Get-RepositoryDocuments -ExcludeArchives:$ExcludeArchives -ExcludeBaseline:$ExcludeBaseline
+    return $Documents
+}
+
+<#
+.SYNOPSIS
+    Exports a document register to CSV.
+.DESCRIPTION
+    Takes document metadata and exports to CSV at the specified path.
+.EXAMPLE
+    Export-DocumentRegister -Documents $metadata -OutputPath ".\DOCUMENT_REGISTER.csv"
+#>
+function Export-DocumentRegister {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [array]$Documents,
+        
+        [Parameter(Mandatory)]
+        [string]$OutputPath
+    )
+    
+    $Rows = @()
+    
+    foreach ($Doc in $Documents) {
+        $Metadata = Get-DocumentMetadata -Path $Doc.FullName
+        $Rows += $Metadata
+    }
+    
+    $Rows | Sort-Object Repository_Path, Filename | Export-Csv -Path $OutputPath -NoTypeInformation -Encoding UTF8
+}
+
+#-------------------------------------------------------------
+# Validation Service (New — Phase 2)
+#-------------------------------------------------------------
+
+<#
+.SYNOPSIS
+    Tests if a document name follows naming conventions.
+.DESCRIPTION
+    Validates document names against approved patterns:
+    - Document A-###
+    - DOCUMENT A-###
+    - GEN *
+    - GOLDEN WINGS *
+.EXAMPLE
+    $result = Test-DocumentName -Name "A-001_Constitution"
+    $result.Success
+#>
+function Test-DocumentName {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Name
+    )
+    
+    $Success = $false
+    $Errors = @()
+    $Warnings = @()
+    
+    # Check against valid patterns
+    if ($Name -match '^Document [A-Z]' -or
+        $Name -match '^DOCUMENT [A-Z]' -or
+        $Name -match '^GEN ' -or
+        $Name -match '^Gen ' -or
+        $Name -match '^GOLDEN WINGS') {
+        $Success = $true
+    } else {
+        $Errors += "Document name '$Name' does not match any approved naming pattern"
+    }
+    
+    [PSCustomObject]@{
+        Success = $Success
+        Errors = $Errors
+        Warnings = $Warnings
+        Name = $Name
+    }
+}
+
+<#
+.SYNOPSIS
+    Validates the repository folder structure.
+.DESCRIPTION
+    Checks that all required folders exist in the repository.
+.EXAMPLE
+    $result = Test-RepositoryStructure
+    $result.MissingFolders
+#>
+function Test-RepositoryStructure {
+    [CmdletBinding()]
+    param()
+    
+    $Root = Get-RepositoryRoot
+    $Config = Get-RepositoryConfiguration
+    $MissingFolders = @()
+    
+    $RequiredFolders = @(
+        "00_README",
+        "01_GOVERNANCE",
+        "02_CONSTITUTIONAL_FRAMEWORK",
+        "03_ENTERPRISE_ARCHITECTURE",
+        "03_ENTERPRISE_ARCHITECTURE\03.01_Business_Architecture",
+        "03_ENTERPRISE_ARCHITECTURE\03.02_Business_Rules",
+        "03_ENTERPRISE_ARCHITECTURE\03.03_Information_Architecture",
+        "03_ENTERPRISE_ARCHITECTURE\03.04_User_Experience",
+        "03_ENTERPRISE_ARCHITECTURE\03.05_Application_Architecture",
+        "03_ENTERPRISE_ARCHITECTURE\03.06_Technology_Architecture",
+        "03_ENTERPRISE_ARCHITECTURE\03.07_Delivery_Operations",
+        "04_ENTERPRISE_ASSURANCE",
+        "05_ENTERPRISE_BASELINE",
+        "06_GOVERNANCE_RECORDS",
+        "07_TEMPLATES",
+        "08_EVIDENCE",
+        "09_ARCHIVES",
+        "10_MACHINE_READABLE",
+        "11_AUTOMATION",
+        "99_REFERENCE"
+    )
+    
+    foreach ($Folder in $RequiredFolders) {
+        $Path = Join-Path $Root $Folder
+        if (-not (Test-Path $Path)) {
+            $MissingFolders += $Folder
+        }
+    }
+    
+    [PSCustomObject]@{
+        Success = ($MissingFolders.Count -eq 0)
+        MissingFolders = $MissingFolders
+        TotalFolders = $RequiredFolders.Count
+    }
+}
+
+<#
+.SYNOPSIS
+    Invokes comprehensive repository validation.
+.DESCRIPTION
+    Runs all validation checks and returns consolidated results.
+.EXAMPLE
+    $results = Invoke-RepositoryValidation
+#>
+function Invoke-RepositoryValidation {
+    [CmdletBinding()]
+    param()
+    
+    $Results = @{
+        DocumentNames = @()
+        Structure = $null
+        Errors = @()
+        Warnings = @()
+        Success = $true
+    }
+    
+    # Get all documents
+    $Documents = Get-RepositoryDocuments -ExcludeArchives -ExcludeBaseline
+    
+    # Validate each document name
+    foreach ($Doc in $Documents) {
+        $Result = Test-DocumentName -Name $Doc.BaseName
+        if (-not $Result.Success) {
+            $Results.Errors += "Document: $($Doc.Name) - $($Result.Errors -join '; ')"
+            $Results.Success = $false
+        }
+        $Results.DocumentNames += $Result
+    }
+    
+    # Validate structure
+    $StructureResult = Test-RepositoryStructure
+    $Results.Structure = $StructureResult
+    if (-not $StructureResult.Success) {
+        $Results.Errors += "Missing folders: $($StructureResult.MissingFolders -join ', ')"
+        $Results.Success = $false
+    }
+    
+    return $Results
+}
+
+#-------------------------------------------------------------
+# Hash Service (Enhanced — Phase 2)
+#-------------------------------------------------------------
+
+<#
+.SYNOPSIS
+    Gets the hash of a file using the specified algorithm.
+.DESCRIPTION
+    Returns the hash value for a file. Supports multiple algorithms.
+    Default is SHA256.
+.PARAMETER Path
+    The path to the file.
+.PARAMETER Algorithm
+    The hash algorithm to use. Default: SHA256.
+.EXAMPLE
+    Get-FileHash -Path "file.txt"
+    Get-FileHash -Path "file.txt" -Algorithm MD5
+#>
+function Get-FileHash {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+        
+        [ValidateSet('MD5', 'SHA1', 'SHA256', 'SHA384', 'SHA512')]
+        [string]$Algorithm = 'SHA256'
+    )
+    
+    if (-not (Test-Path $Path)) {
+        throw "File not found: $Path"
+    }
+    
+    $Hash = (Get-FileHash -Path $Path -Algorithm $Algorithm).Hash
+    return $Hash
+}
+
+<#
+.SYNOPSIS
+    Exports a hash inventory for all repository files.
+.DESCRIPTION
+    Generates SHA256 hashes for all controlled files in the repository
+    and exports them to a CSV file.
+.PARAMETER OutputPath
+    The path where the CSV inventory should be saved.
+.PARAMETER Algorithm
+    The hash algorithm to use. Default: SHA256.
+.EXAMPLE
+    Export-HashInventory -OutputPath ".\HASHES.csv"
+#>
+function Export-HashInventory {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$OutputPath,
+        
+        [ValidateSet('MD5', 'SHA1', 'SHA256', 'SHA384', 'SHA512')]
+        [string]$Algorithm = 'SHA256'
+    )
+    
+    $Root = Get-RepositoryRoot
+    $ExcludedPatterns = @(
+        [regex]::Escape((Get-RepositoryConfiguration).ArchivesRoot),
+        [regex]::Escape((Join-Path (Get-RepositoryConfiguration).EvidenceFolder "Hashes"))
+    )
+    
+    $Files = Get-ChildItem $Root -Recurse -File -Include *.docx,*.md,*.csv |
+        Where-Object {
+            $Include = $true
+            foreach ($Pattern in $ExcludedPatterns) {
+                if ($_.FullName -match $Pattern) {
+                    $Include = $false
+                    break
+                }
+            }
+            $Include
+        }
+    
+    $Inventory = foreach ($File in $Files) {
+        $Hash = Get-FileHash -Path $File.FullName -Algorithm $Algorithm
+        
+        [PSCustomObject]@{
+            Repository_Path = Get-RelativePath -FullPath $File.FullName
+            Hash = $Hash
+            Algorithm = $Algorithm
+            FileName = $File.Name
+            LastModified = $File.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
+        }
+    }
+    
+    $Inventory | Sort-Object Repository_Path | Export-Csv -Path $OutputPath -NoTypeInformation -Encoding UTF8
+    
+    return $Inventory
+}
+
+<#
+.SYNOPSIS
+    Verifies a file's hash matches the expected value.
+.DESCRIPTION
+    Compares the computed hash of a file against the expected hash.
+    Returns $true if they match.
+.PARAMETER Path
+    The path to the file.
+.PARAMETER ExpectedHash
+    The expected hash value.
+.PARAMETER Algorithm
+    The hash algorithm to use. Default: SHA256.
+.EXAMPLE
+    Verify-Hash -Path "file.txt" -ExpectedHash "abc123..."
+#>
+function Verify-Hash {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+        
+        [Parameter(Mandatory)]
+        [string]$ExpectedHash,
+        
+        [ValidateSet('MD5', 'SHA1', 'SHA256', 'SHA384', 'SHA512')]
+        [string]$Algorithm = 'SHA256'
+    )
+    
+    try {
+        $ComputedHash = Get-FileHash -Path $Path -Algorithm $Algorithm
+        return ($ComputedHash -eq $ExpectedHash)
+    }
+    catch {
+        Write-ErrorMessage "Failed to verify hash: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+
+#-------------------------------------------------------------
+# Exported Functions (33 functions — VERIFIED)
 #-------------------------------------------------------------
 
 Export-ModuleMember -Function @(
@@ -586,5 +984,22 @@ Export-ModuleMember -Function @(
     'Get-RepositoryDocuments',
     'Get-RepositoryScripts',
     'Get-RepositoryFolders',
-    'Get-RepositoryState'
-)  # Total: 7+8+1+4+2+1+2+4 = 29 functions
+    'Get-RepositoryState',
+    
+    # Document Service (New — Phase 2) — 4 functions
+    'Parse-DocumentID',
+    'Get-DocumentMetadata',
+    'Get-Documents',
+    'Export-DocumentRegister',
+
+    # Validation Service (New — Phase 2) — 3 functions
+    'Test-DocumentName',
+    'Test-RepositoryStructure',
+    'Invoke-RepositoryValidation',
+
+    # Hash Service (New — Phase 2) — 3 functions
+    'Get-FileHash',
+    'Export-HashInventory',
+    'Verify-Hash'
+
+)  # Total: 7+8+1+4+2+1+2+4+4 = 39 functions

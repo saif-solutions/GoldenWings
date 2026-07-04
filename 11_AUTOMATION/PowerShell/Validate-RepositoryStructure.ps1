@@ -1,6 +1,8 @@
+Import-Module "$PSScriptRoot\Modules\Repository.Common.psm1" -Force
+
 Clear-Host
 
-$Root = "D:\GoldenWings"
+$Root = Get-RepositoryRoot
 
 $RequiredFolders = @(
 

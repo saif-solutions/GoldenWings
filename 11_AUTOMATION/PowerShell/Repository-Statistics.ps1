@@ -1,6 +1,8 @@
+Import-Module "$PSScriptRoot\Modules\Repository.Common.psm1" -Force
+
 Clear-Host
 
-$Root = "D:\GoldenWings"
+$Root = Get-RepositoryRoot
 
 $Docx = (Get-ChildItem $Root -Recurse -File -Filter *.docx).Count
 $Markdown = (Get-ChildItem $Root -Recurse -File -Filter *.md).Count

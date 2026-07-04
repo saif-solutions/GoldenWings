@@ -1,3 +1,5 @@
+Import-Module "$PSScriptRoot\Modules\Repository.Common.psm1" -Force
+
 Clear-Host
 
 Write-Host ""
@@ -20,8 +22,8 @@ Write-Host "[3/4] Verifying Repository..."
 Write-Host ""
 Write-Host "[4/4] Updating Release Archive..."
 
-$BaselineFolder = "D:\GoldenWings\05_ENTERPRISE_BASELINE\GW-BASELINE-2026.1"
-$ReleaseFolder  = "D:\GoldenWings\09_ARCHIVES\GW-Release-2026.1"
+$BaselineFolder = Get-BaselineFolder
+$ReleaseFolder = Get-ReleaseFolder
 
 Copy-Item "$BaselineFolder\MANIFEST.md" "$ReleaseFolder" -Force
 Copy-Item "$BaselineFolder\HASHES.txt" "$ReleaseFolder" -Force
