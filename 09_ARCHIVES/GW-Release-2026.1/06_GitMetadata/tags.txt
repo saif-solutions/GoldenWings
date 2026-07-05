@@ -1,0 +1,5 @@
+﻿Repository.Common-v1.2
+Repository.Common-v1.5
+Repository.Common-v1.8
+Repository.Common-v1.9
+Repository.Common-v1.9.0

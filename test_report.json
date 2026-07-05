@@ -1,0 +1,27 @@
+﻿{
+    "Health":  {
+                   "ScriptCount":  13,
+                   "FolderCount":  50,
+                   "DocumentCount":  120,
+                   "LastModified":  "\/Date(1783148896067)\/"
+               },
+    "Version":  "2026.1",
+    "ReportType":  "Health",
+    "Evidence":  {
+                     "LastEvidence":  null,
+                     "TotalFiles":  0,
+                     "Exists":  false
+                 },
+    "Timestamp":  "2026-07-04 13:09:31",
+    "Baseline":  "GW-BASELINE-2026.1",
+    "Status":  "Warning",
+    "Repository":  "D:\\GoldenWings",
+    "Statistics":  {
+                       "Folders":  50,
+                       "Scripts":  13,
+                       "Documents":  120,
+                       "CSV":  4,
+                       "Markdown":  5,
+                       "JSON":  2
+                   }
+}

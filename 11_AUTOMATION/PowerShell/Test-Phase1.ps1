@@ -1,5 +1,5 @@
 # ============================================
-# Phase 1 Validation — Regression Test Suite
+# Phase 1-4 Validation — Regression Test Suite
 # Run this to verify all scripts work
 # ============================================
 
@@ -11,7 +11,7 @@ Set-Location $ScriptRoot
 Import-Module .\Modules\Repository.Common.psm1 -Force
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Phase 1 Validation Suite" -ForegroundColor Cyan
+Write-Host "GW-EAF Validation Suite" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -43,10 +43,10 @@ $Result = Run-Test -Name "Module Import" -Action {
 }
 $Results += $Result
 
-# Test 2: Export Count (29)
-$Result = Run-Test -Name "Export Count (29)" -Action {
+# Test 2: Export Count (55)
+$Result = Run-Test -Name "Export Count (55)" -Action {
     $Count = (Get-Command -Module Repository.Common).Count
-    if ($Count -ne 29) { throw "Expected 29, got $Count" }
+    if ($Count -ne 55) { throw "Expected 55, got $Count" }
 }
 $Results += $Result
 
@@ -79,63 +79,119 @@ $Result = Run-Test -Name "Repository Service" -Action {
 }
 $Results += $Result
 
-# Test 7: Build-Baseline.ps1
+# Test 7: Document Service
+$Result = Run-Test -Name "Document Service" -Action {
+    $Docs = Get-Documents -ExcludeArchives -ExcludeBaseline
+    if ($null -eq $Docs) { throw "Documents returned null" }
+}
+$Results += $Result
+
+# Test 8: Validation Service
+$Result = Run-Test -Name "Validation Service" -Action {
+    $Structure = Test-RepositoryStructure
+    if ($null -eq $Structure) { throw "Structure validation returned null" }
+}
+$Results += $Result
+
+# Test 9: Hash Service
+$Result = Run-Test -Name "Hash Service" -Action {
+    $Hash = Get-RepositoryFileHash -Path "$ScriptRoot\Modules\Repository.Common.psm1"
+    if ([string]::IsNullOrEmpty($Hash)) { throw "Hash returned empty" }
+}
+$Results += $Result
+
+# Test 10: Manifest Service
+$Result = Run-Test -Name "Manifest Service" -Action {
+    $Data = Get-ManifestData
+    if ($null -eq $Data) { throw "Manifest data returned null" }
+}
+$Results += $Result
+
+# Test 11: Evidence Service
+$Result = Run-Test -Name "Evidence Service" -Action {
+    $Evidence = New-Evidence -Operation "Test" -Status "Success"
+    if ($null -eq $Evidence) { throw "Evidence returned null" }
+}
+$Results += $Result
+
+# Test 12: Report Service
+$Result = Run-Test -Name "Report Service" -Action {
+    $Report = New-Report -Type "Health"
+    if ($null -eq $Report) { throw "Report returned null" }
+}
+$Results += $Result
+
+# Test 13: Git Service
+$Result = Run-Test -Name "Git Service" -Action {
+    $Status = Get-GitStatus
+    if ($null -eq $Status) { throw "GitStatus returned null" }
+    if (-not $Status.IsGitRepository) { throw "Not a Git repository" }
+}
+$Results += $Result
+
+# Test 14: Build-Baseline.ps1
 $Result = Run-Test -Name "Build-Baseline.ps1" -Action {
     & .\Build-Baseline.ps1
 }
 $Results += $Result
 
-# Test 8: Build-DocumentRegister.ps1
+# Test 15: Build-DocumentRegister.ps1
 $Result = Run-Test -Name "Build-DocumentRegister.ps1" -Action {
     & .\Build-DocumentRegister.ps1
 }
 $Results += $Result
 
-# Test 9: Build-Hashes.ps1
+# Test 16: Build-Hashes.ps1
 $Result = Run-Test -Name "Build-Hashes.ps1" -Action {
     & .\Build-Hashes.ps1
 }
 $Results += $Result
 
-# Test 10: Generate-RepositoryMetadata.ps1
-$Result = Run-Test -Name "Generate-RepositoryMetadata.ps1" -Action {
-    & .\Generate-RepositoryMetadata.ps1
-}
-$Results += $Result
-
-# Test 11: Validate-DocumentNames.ps1
-$Result = Run-Test -Name "Validate-DocumentNames.ps1" -Action {
-    & .\Validate-DocumentNames.ps1
-}
-$Results += $Result
-
-# Test 12: Validate-RepositoryStructure.ps1
-$Result = Run-Test -Name "Validate-RepositoryStructure.ps1" -Action {
-    & .\Validate-RepositoryStructure.ps1
-}
-$Results += $Result
-
-# Test 13: Verify-Repository.ps1
-$Result = Run-Test -Name "Verify-Repository.ps1" -Action {
-    & .\Verify-Repository.ps1
-}
-$Results += $Result
-
-# Test 14: Repository-Statistics.ps1
-$Result = Run-Test -Name "Repository-Statistics.ps1" -Action {
-    & .\Repository-Statistics.ps1
-}
-$Results += $Result
-
-# Test 15: Generate-Manifest.ps1
+# Test 17: Generate-Manifest.ps1
 $Result = Run-Test -Name "Generate-Manifest.ps1" -Action {
     & .\Generate-Manifest.ps1
 }
 $Results += $Result
 
-# Test 16: Release-Repository.ps1
+# Test 18: Generate-RepositoryMetadata.ps1
+$Result = Run-Test -Name "Generate-RepositoryMetadata.ps1" -Action {
+    & .\Generate-RepositoryMetadata.ps1
+}
+$Results += $Result
+
+# Test 19: Validate-DocumentNames.ps1
+$Result = Run-Test -Name "Validate-DocumentNames.ps1" -Action {
+    & .\Validate-DocumentNames.ps1
+}
+$Results += $Result
+
+# Test 20: Validate-RepositoryStructure.ps1
+$Result = Run-Test -Name "Validate-RepositoryStructure.ps1" -Action {
+    & .\Validate-RepositoryStructure.ps1
+}
+$Results += $Result
+
+# Test 21: Verify-Repository.ps1
+$Result = Run-Test -Name "Verify-Repository.ps1" -Action {
+    & .\Verify-Repository.ps1
+}
+$Results += $Result
+
+# Test 22: Repository-Statistics.ps1
+$Result = Run-Test -Name "Repository-Statistics.ps1" -Action {
+    & .\Repository-Statistics.ps1
+}
+$Results += $Result
+
+# Test 23: Release-Repository.ps1
 $Result = Run-Test -Name "Release-Repository.ps1" -Action {
     & .\Release-Repository.ps1
+}
+$Results += $Result
+
+# Test 24: Get-RepositoryStatus.ps1
+$Result = Run-Test -Name "Get-RepositoryStatus.ps1" -Action {
+    & .\Get-RepositoryStatus.ps1
 }
 $Results += $Result
 
@@ -154,7 +210,7 @@ Write-Host "FAIL: $FailCount" -ForegroundColor Red
 
 if ($FailCount -eq 0) {
     Write-Host ""
-    Write-Host "✅ ALL TESTS PASSED — Phase 1 Ready for Lock" -ForegroundColor Green
+    Write-Host "✅ ALL TESTS PASSED — GW-EAF v1.9 Ready for Lock" -ForegroundColor Green
 } else {
     Write-Host ""
     Write-Host "❌ TESTS FAILED — Review errors before locking" -ForegroundColor Red

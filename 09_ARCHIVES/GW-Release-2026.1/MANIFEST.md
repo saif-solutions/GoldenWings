@@ -6,10 +6,10 @@
 |----------|-------|
 | Repository | Golden Wings Enterprise Repository |
 | Baseline ID | GW-BASELINE-2026.1 |
-| Version | 1.0 |
+| Version | 2026.1 |
 | Status | Approved Baseline |
-| Date | 2026-07-02 |
-| Controlled Documents | 99 |
+| Date | 2026-07-04 16:47:16 |
+| Controlled Documents | 120 |
 
 ---
 
@@ -55,5 +55,4 @@
 
 ---
 
-Generated Automatically
-
+Generated Automatically by GW-EAF Manifest Service
