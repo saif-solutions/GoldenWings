@@ -1,0 +1,111 @@
+# GW-EAF Cross-Platform Testing
+# Runs weekly and on demand to validate PowerShell 5.1, 7, and cross-platform compatibility
+
+name: GW-EAF Cross-Platform Tests
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'  # Every Monday at midnight
+  workflow_dispatch:
+
+jobs:
+  cross-platform:
+    name: Cross-Platform Validation
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        pwsh-version: ['7.2.6', '7.3.0']
+        include:
+          - os: windows-latest
+            pwsh-version: '5.1'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup PowerShell
+      uses: actions/setup-powershell@v1
+      with:
+        pwsh-version: ${{ matrix.pwsh-version }}
+    
+    - name: Display Environment Info
+      shell: pwsh
+      run: |
+        Write-Host "========================================" -ForegroundColor Cyan
+        Write-Host "GW-EAF Cross-Platform Test" -ForegroundColor Cyan
+        Write-Host "========================================" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "Operating System: $env:OS" -ForegroundColor Yellow
+        Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)" -ForegroundColor Yellow
+        Write-Host "OS Version: $($PSVersionTable.OS)" -ForegroundColor Yellow
+        Write-Host ""
+    
+    - name: Import Module
+      shell: pwsh
+      run: |
+        Import-Module .\11_AUTOMATION\PowerShell\Modules\Repository.Common.psm1 -Force
+        Write-Host "✅ Module imported successfully" -ForegroundColor Green
+    
+    - name: Verify Export Count
+      shell: pwsh
+      run: |
+        $Count = (Get-Command -Module Repository.Common).Count
+        Write-Host "Exported functions: $Count" -ForegroundColor Cyan
+        if ($Count -ne 55) { 
+          Write-Host "❌ Expected 55, got $Count" -ForegroundColor Red
+          exit 1
+        }
+        Write-Host "✅ Export count verified: $Count" -ForegroundColor Green
+    
+    - name: Run Pester Tests
+      shell: pwsh
+      run: |
+        Write-Host "Running Pester Tests..." -ForegroundColor Yellow
+        Invoke-Pester -Path .\11_AUTOMATION\PowerShell\Tests\Repository.Common.Tests.ps1 -Output Detailed
+      continue-on-error: false
+    
+    - name: Run Performance Tests
+      shell: pwsh
+      run: |
+        Write-Host "Running Performance Tests..." -ForegroundColor Yellow
+        Invoke-Pester -Path .\11_AUTOMATION\PowerShell\Tests\Performance.Tests.ps1 -Output Detailed
+      continue-on-error: false
+    
+    - name: Run Clean Install Test
+      shell: pwsh
+      run: |
+        Write-Host "Running Clean Install Tests..." -ForegroundColor Yellow
+        .\11_AUTOMATION\PowerShell\Tests\CleanInstall.Tests.ps1
+      continue-on-error: false
+    
+    - name: Run Regression Tests
+      shell: pwsh
+      run: |
+        Write-Host "Running Regression Tests..." -ForegroundColor Yellow
+        cd 11_AUTOMATION\PowerShell
+        .\Test-Phase1.ps1
+      continue-on-error: false
+    
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: cross-platform-results-${{ matrix.os }}-${{ matrix.pwsh-version }}
+        path: |
+          D:\GoldenWings\08_EVIDENCE\Reports\
+          D:\GoldenWings\08_EVIDENCE\Verification\
+        retention-days: 30
+
+    - name: Summary
+      shell: pwsh
+      if: always()
+      run: |
+        Write-Host ""
+        Write-Host "========================================" -ForegroundColor Cyan
+        Write-Host "✅ Cross-Platform Tests Complete" -ForegroundColor Green
+        Write-Host "   OS: $env:OS" -ForegroundColor Yellow
+        Write-Host "   PowerShell: $($PSVersionTable.PSVersion)" -ForegroundColor Yellow
+        Write-Host "========================================" -ForegroundColor Cyan

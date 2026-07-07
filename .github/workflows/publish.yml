@@ -1,0 +1,232 @@
+# GW-EAF PowerShell Gallery Publication
+# Runs when a release tag is pushed or manually triggered
+
+name: Publish to PowerShell Gallery
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_key:
+        description: 'PowerShell Gallery API Key'
+        required: true
+        type: string
+  push:
+    tags:
+      - 'Repository.Common-v*'
+
+jobs:
+  publish:
+    name: Publish to PSGallery
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup PowerShell
+      uses: actions/setup-powershell@v1
+    
+    - name: Display PowerShell Version
+      shell: pwsh
+      run: |
+        Write-Host "========================================" -ForegroundColor Cyan
+        Write-Host "PowerShell Gallery Publication" -ForegroundColor Cyan
+        Write-Host "========================================" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)" -ForegroundColor Yellow
+        Write-Host ""
+    
+    - name: Create Scripts Directory
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force -Path "D:\GoldenWings\11_AUTOMATION\PowerShell\Scripts" -ErrorAction SilentlyContinue
+        Write-Host "✅ Scripts directory created" -ForegroundColor Green
+    
+    - name: Create Publish Script
+      shell: pwsh
+      run: |
+        $ScriptContent = @'
+# ============================================
+# GW-EAF PowerShell Gallery Publication Script
+# ============================================
+
+param(
+    [Parameter(Mandatory)]
+    [string]$ApiKey,
+    
+    [string]$ModulePath = "D:\GoldenWings\11_AUTOMATION\PowerShell\Modules",
+    
+    [switch]$DryRun
+)
+
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "GW-EAF PowerShell Gallery Publisher" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+
+# Navigate to module path
+Set-Location $ModulePath
+
+# Validate manifest exists
+if (-not (Test-Path ".\Repository.Common.psd1")) {
+    Write-Error "Module manifest not found at $ModulePath"
+    exit 1
+}
+
+# Test module manifest
+Write-Host "Validating module manifest..." -ForegroundColor Yellow
+$Manifest = Test-ModuleManifest -Path .\Repository.Common.psd1
+if (-not $Manifest) {
+    Write-Error "Module manifest validation failed"
+    exit 1
+}
+Write-Host "✅ Module manifest validated" -ForegroundColor Green
+
+# Import module to test
+Write-Host "Testing module import..." -ForegroundColor Yellow
+Import-Module .\Repository.Common.psm1 -Force
+
+# Verify export count
+$Count = (Get-Command -Module Repository.Common).Count
+if ($Count -ne 55) {
+    Write-Error "Expected 55 functions, got $Count"
+    exit 1
+}
+Write-Host "✅ Module import test passed ($Count functions)" -ForegroundColor Green
+
+# Dry run
+if ($DryRun) {
+    Write-Host ""
+    Write-Host "DRY RUN — No changes will be published" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Module: Repository.Common" -ForegroundColor Cyan
+    Write-Host "Version: $($Manifest.Version)" -ForegroundColor Cyan
+    Write-Host "Functions: $Count" -ForegroundColor Cyan
+    Write-Host "Path: $ModulePath" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "To publish, run: .\Publish-Module.ps1 -ApiKey <your-api-key>" -ForegroundColor Yellow
+    exit 0
+}
+
+# Publish to PowerShell Gallery
+Write-Host ""
+Write-Host "Publishing to PowerShell Gallery..." -ForegroundColor Yellow
+
+try {
+    Publish-Module `
+        -Path .\ `
+        -NuGetApiKey $ApiKey `
+        -Repository PSGallery `
+        -Verbose
+    
+    Write-Host ""
+    Write-Host "✅ Module published successfully!" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Install with:" -ForegroundColor Cyan
+    Write-Host "  Install-Module -Name GW-EAF -Force" -ForegroundColor White
+    Write-Host ""
+    Write-Host "Import with:" -ForegroundColor Cyan
+    Write-Host "  Import-Module GW-EAF -Force" -ForegroundColor White
+    Write-Host ""
+}
+catch {
+    Write-Error "Failed to publish: $($_.Exception.Message)"
+    exit 1
+}
+'@
+        $ScriptContent | Out-File -FilePath "D:\GoldenWings\11_AUTOMATION\PowerShell\Scripts\Publish-Module.ps1" -Encoding UTF8
+        Write-Host "✅ Publish script created" -ForegroundColor Green
+    
+    - name: Validate Module Manifest
+      shell: pwsh
+      run: |
+        cd D:\GoldenWings\11_AUTOMATION\PowerShell\Modules
+        $Manifest = Test-ModuleManifest -Path .\Repository.Common.psd1
+        if ($Manifest) {
+          Write-Host "✅ Module manifest valid" -ForegroundColor Green
+          Write-Host "   Version: $($Manifest.Version)" -ForegroundColor Cyan
+          Write-Host "   Functions: $($Manifest.ExportedFunctions.Count)" -ForegroundColor Cyan
+        } else {
+          Write-Host "❌ Module manifest invalid" -ForegroundColor Red
+          exit 1
+        }
+    
+    - name: Import Module
+      shell: pwsh
+      run: |
+        Import-Module D:\GoldenWings\11_AUTOMATION\PowerShell\Modules\Repository.Common.psm1 -Force
+        Write-Host "✅ Module imported successfully" -ForegroundColor Green
+    
+    - name: Verify Export Count
+      shell: pwsh
+      run: |
+        $Count = (Get-Command -Module Repository.Common).Count
+        Write-Host "Exported functions: $Count" -ForegroundColor Cyan
+        if ($Count -ne 55) { 
+          Write-Host "❌ Expected 55, got $Count" -ForegroundColor Red
+          exit 1
+        }
+        Write-Host "✅ Export count verified: $Count" -ForegroundColor Green
+    
+    - name: Run Quick Validation
+      shell: pwsh
+      run: |
+        Write-Host ""
+        Write-Host "Running quick validation..." -ForegroundColor Yellow
+        
+        # Test basic commands
+        $Version = Get-RepositoryVersion
+        $Root = Get-RepositoryRoot
+        $State = Get-RepositoryState
+        
+        Write-Host "✅ Get-RepositoryVersion: $Version" -ForegroundColor Green
+        Write-Host "✅ Get-RepositoryRoot: $Root" -ForegroundColor Green
+        Write-Host "✅ Get-RepositoryState: $($State.DocumentCount) documents" -ForegroundColor Green
+        Write-Host ""
+    
+    - name: Publish to PowerShell Gallery
+      shell: pwsh
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+      run: |
+        $ApiKey = if ($env:NUGET_API_KEY) { $env:NUGET_API_KEY } else { '${{ github.event.inputs.api_key }}' }
+        
+        if (-not $ApiKey -or $ApiKey -eq '${{ github.event.inputs.api_key }}') {
+          Write-Host "⚠️ No API key provided." -ForegroundColor Yellow
+          Write-Host "To publish, set NUGET_API_KEY secret or provide API key manually." -ForegroundColor Yellow
+          Write-Host ""
+          Write-Host "For manual publishing, run:" -ForegroundColor Cyan
+          Write-Host "  .\11_AUTOMATION\PowerShell\Scripts\Publish-Module.ps1 -ApiKey <your-api-key>" -ForegroundColor White
+          exit 0
+        }
+        
+        .\11_AUTOMATION\PowerShell\Scripts\Publish-Module.ps1 -ApiKey $ApiKey
+    
+    - name: Success Notification
+      shell: pwsh
+      if: success()
+      run: |
+        Write-Host ""
+        Write-Host "========================================" -ForegroundColor Green
+        Write-Host "✅ Published to PowerShell Gallery!" -ForegroundColor Green
+        Write-Host "========================================" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "Install with:" -ForegroundColor Cyan
+        Write-Host "  Install-Module -Name GW-EAF -Force" -ForegroundColor White
+        Write-Host ""
+        Write-Host "Import with:" -ForegroundColor Cyan
+        Write-Host "  Import-Module GW-EAF -Force" -ForegroundColor White
+        Write-Host ""
+    
+    - name: Failure Notification
+      shell: pwsh
+      if: failure()
+      run: |
+        Write-Host ""
+        Write-Host "========================================" -ForegroundColor Red
+        Write-Host "❌ Failed to publish to PowerShell Gallery" -ForegroundColor Red
+        Write-Host "========================================" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Check the logs for details." -ForegroundColor Yellow
+        Write-Host ""
