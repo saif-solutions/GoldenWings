@@ -16,9 +16,9 @@ Describe "Repository.Common Module" {
         $Module | Should Not Be $null
     }
 
-    It "Should export exactly 55 functions" {
+    It "Should export exactly 58 functions" {
         $Functions = Get-Command -Module Repository.Common
-        $Functions.Count | Should Be 55
+        $Functions.Count | Should Be 58
     }
 }
 

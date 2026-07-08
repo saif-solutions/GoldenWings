@@ -3,7 +3,7 @@
 # Golden Wings Enterprise Automation Framework
 # Repository.Common.psm1
 #
-# Version : 1.9
+# Version : 1.10.0
 # Baseline: GW-BASELINE-2026.1
 #
 # PHASE 1 IMPLEMENTATION (2026-07-04)
@@ -21,7 +21,7 @@
 # - Evidence Service
 # - Report Service
 #
-# Total: 55 exported functions
+# Total: 58 exported functions
 #
 ##############################################################
 
@@ -1450,6 +1450,178 @@ function Get-GitStatus {
     }
 }
 
+
+#-------------------------------------------------------------
+# GitHub Service (New — Phase 5)
+#-------------------------------------------------------------
+
+<#
+.SYNOPSIS
+    Creates a GitHub release.
+.DESCRIPTION
+    Creates a release on GitHub using the GitHub API.
+.PARAMETER TagName
+    The tag name for the release.
+.PARAMETER ReleaseNotes
+    The release notes content.
+.PARAMETER Draft
+    Whether the release is a draft.
+.PARAMETER Prerelease
+    Whether the release is a prerelease.
+.PARAMETER Assets
+    Optional array of file paths to upload as assets.
+.EXAMPLE
+    New-GitHubRelease -TagName "Repository.Common-v1.9.0" -ReleaseNotes $notes
+#>
+function New-GitHubRelease {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$TagName,
+        
+        [string]$ReleaseNotes = "",
+        
+        [switch]$Draft,
+        
+        [switch]$Prerelease,
+        
+        [string[]]$Assets = @()
+    )
+    
+    $Config = Get-RepositoryConfiguration
+    $Root = $Config.Root
+    
+    # Check for GitHub token
+    $Token = $env:GITHUB_TOKEN
+    if (-not $Token) {
+        Write-ErrorMessage "GITHUB_TOKEN environment variable not set"
+        return $false
+    }
+    
+    # Get repository info from git config
+    $RemoteUrl = git config --get remote.origin.url
+    if ($RemoteUrl -match "github\.com[:/](.+)/(.+)(\.git)?") {
+        $Owner = $Matches[1]
+        $Repo = $Matches[2]
+    } else {
+        Write-ErrorMessage "Could not determine GitHub repository from git remote"
+        return $false
+    }
+    
+    $Headers = @{
+        "Authorization" = "Bearer $Token"
+        "Accept" = "application/vnd.github.v3+json"
+    }
+    
+    $Body = @{
+        tag_name = $TagName
+        name = "GW-EAF $TagName"
+        body = $ReleaseNotes
+        draft = $Draft
+        prerelease = $Prerelease
+    } | ConvertTo-Json
+    
+    $Uri = "https://api.github.com/repos/$Owner/$Repo/releases"
+    
+    try {
+        $Response = Invoke-RestMethod -Uri $Uri -Method Post -Headers $Headers -Body $Body -ContentType "application/json"
+        Write-Success "GitHub release created: $TagName"
+        Write-Info "Release URL: $($Response.html_url)"
+        
+        # Upload assets if provided
+        if ($Assets.Count -gt 0) {
+            $UploadUrl = $Response.upload_url -replace "\{.*\}$", ""
+            foreach ($Asset in $Assets) {
+                if (Test-Path $Asset) {
+                    $AssetName = Split-Path $Asset -Leaf
+                    $AssetUri = "$UploadUrl?name=$AssetName"
+                    $AssetContent = Get-Content -Path $Asset -Raw
+                    $AssetHeaders = $Headers.Clone()
+                    $AssetHeaders["Content-Type"] = "application/octet-stream"
+                    
+                    Invoke-RestMethod -Uri $AssetUri -Method Post -Headers $AssetHeaders -Body $AssetContent
+                    Write-Success "Asset uploaded: $AssetName"
+                } else {
+                    Write-WarningMessage "Asset not found: $Asset"
+                }
+            }
+        }
+        
+        return $true
+    }
+    catch {
+        Write-ErrorMessage "Failed to create GitHub release: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+<#
+.SYNOPSIS
+    Gets the latest GitHub release.
+.DESCRIPTION
+    Returns the latest release from GitHub.
+.EXAMPLE
+    $release = Get-GitHubLatestRelease
+#>
+function Get-GitHubLatestRelease {
+    [CmdletBinding()]
+    param()
+    
+    $RemoteUrl = git config --get remote.origin.url
+    if ($RemoteUrl -match "github\.com[:/](.+)/(.+)(\.git)?") {
+        $Owner = $Matches[1]
+        $Repo = $Matches[2]
+    } else {
+        Write-ErrorMessage "Could not determine GitHub repository from git remote"
+        return $null
+    }
+    
+    $Uri = "https://api.github.com/repos/$Owner/$Repo/releases/latest"
+    
+    try {
+        $Release = Invoke-RestMethod -Uri $Uri -Method Get
+        return $Release
+    }
+    catch {
+        Write-ErrorMessage "Failed to get latest release: $($_.Exception.Message)"
+        return $null
+    }
+}
+
+<#
+.SYNOPSIS
+    Gets all GitHub releases.
+.DESCRIPTION
+    Returns all releases from GitHub.
+.EXAMPLE
+    $releases = Get-GitHubReleases
+#>
+function Get-GitHubReleases {
+    [CmdletBinding()]
+    param()
+    
+    $RemoteUrl = git config --get remote.origin.url
+    if ($RemoteUrl -match "github\.com[:/](.+)/(.+)(\.git)?") {
+        $Owner = $Matches[1]
+        $Repo = $Matches[2]
+    } else {
+        Write-ErrorMessage "Could not determine GitHub repository from git remote"
+        return $null
+    }
+    
+    $Uri = "https://api.github.com/repos/$Owner/$Repo/releases"
+    
+    try {
+        $Releases = Invoke-RestMethod -Uri $Uri -Method Get
+        return $Releases
+    }
+    catch {
+        Write-ErrorMessage "Failed to get releases: $($_.Exception.Message)"
+        return $null
+    }
+}
+
+
 <#
 .SYNOPSIS
     Gets Git commit history.
@@ -1745,7 +1917,7 @@ function Invoke-GitPull {
 
 
 #-------------------------------------------------------------
-# Exported Functions (55 functions — VERIFIED)
+# Exported Functions (58 functions — VERIFIED)
 #-------------------------------------------------------------
 
 Export-ModuleMember -Function @(
@@ -1832,6 +2004,11 @@ Export-ModuleMember -Function @(
     'New-GitTag',
     'Get-GitBranches',
     'Invoke-GitPush',
-    'Invoke-GitPull'
+    'Invoke-GitPull',
+
+# GitHub Service (New — Phase 5) — 3 functions
+'New-GitHubRelease',
+'Get-GitHubLatestRelease',
+'Get-GitHubReleases'
 
 )
